@@ -1,0 +1,22 @@
+# Visual Studio 临时文件 
+.vs/ 
+*.suo 
+*.user 
+*.db 
+*.ipch 
+
+# 编译输出 
+x64/ 
+Debug/ 
+Release/ 
+*.exe 
+*.ilk 
+*.pdb 
+*.obj 
+
+# EasyX 安装包（source/ 下的 exe/zip 可选，如果太大也建议忽略） 
+source/*.exe 
+source/*.zip 
+
+# 其他 IDE 配置（如果不需要共享） 
+.vscode/
