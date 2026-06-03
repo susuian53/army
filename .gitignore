@@ -1,22 +1,47 @@
-# Visual Studio 临时文件 
-.vs/ 
-*.suo 
-*.user 
-*.db 
-*.ipch 
+# Visual Studio 临时文件
+.vs/
+*.suo
+*.user
+*.db
+*.ipch
 
-# 编译输出 
-x64/ 
-Debug/ 
-Release/ 
-*.exe 
-*.ilk 
-*.pdb 
-*.obj 
+# 编译输出
+x64/
+Debug/
+Release/
+*.exe
+*.ilk
+*.pdb
+*.obj
+*.recipe
+*.log
 
-# EasyX 安装包（source/ 下的 exe/zip 可选，如果太大也建议忽略） 
-source/*.exe 
-source/*.zip 
+# VS 用户及构建缓存
+*.user
+*.tlog/
+
+# 测试临时文件
+test_*.exe
+test_*.obj
+test_*.bat
+test_*.cpp
+wav_test.txt
+
+# 调试日志
+debug.log
+
+# 杂项垃圾
+*.png
+check_wmp.*
+convert_to_wav.*
+test_compile.*
+
+# EasyX 安装包（source/ 下的 exe/zip 可选，如果太大也建议忽略）
+source/*.exe
+source/*.zip
+
+# VS Code 配置（个人）
+.vscode/
 
 # 其他 IDE 配置（如果不需要共享） 
 .vscode/

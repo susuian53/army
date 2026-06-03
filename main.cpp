@@ -1,8 +1,26 @@
-#include "game.h"
+﻿#include "game.h"
 #include "draw.h"
 #include "music.h"
 #include <windows.h>
 #include <chrono>
+
+// 根据可执行文件路径解析音乐文件夹（支持从不同目录启动）
+std::wstring resolveMusicFolder() {
+    wchar_t exePath[MAX_PATH] = {};
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    std::wstring path(exePath);
+    // 从 exe 路径向上查找，定位到项目根目录下的 电台节目 文件夹
+    // exe 在 x64\Debug\Army.exe 或 Army\x64\Debug\Army.exe
+    auto pos = path.rfind(L'\\');
+    if (pos != std::wstring::npos) path = path.substr(0, pos);
+    pos = path.rfind(L'\\');
+    if (pos != std::wstring::npos) path = path.substr(0, pos);
+    // 再往上一级，到达项目根目录
+    pos = path.rfind(L'\\');
+    if (pos != std::wstring::npos) path = path.substr(0, pos);
+    path += L"\\电台节目";
+    return path;
+}
 
 int main() {
     // 1. Initialize graphics window (初始化图形窗口)
@@ -16,6 +34,12 @@ int main() {
     Pos selectedPos = {-1, -1};
     int winner = 0;
     bool running = true;
+    bool victoryMusicStarted = false;
+
+    // 设置音乐文件夹并启动背景音乐（使用相对路径解析）
+    std::wstring musicFolder = resolveMusicFolder();
+    music.setMusicFolder(musicFolder);
+    music.playBackgroundMusic();
 
     // 2. High-precision timers for interaction (高精度计时器)
     auto lastClickTime = std::chrono::steady_clock::now();
@@ -29,6 +53,29 @@ int main() {
     while (running) {
         // --- 1. WIN CHECK (胜负判定) ---
         winner = game.checkWinner();
+
+        // --- 1.1 VICTORY MUSIC HANDLING (胜利音乐处理) ---
+        if (winner != 0) {
+            if (!victoryMusicStarted) {
+                music.playVictoryMusic(musicFolder);
+                victoryMusicStarted = true;
+            } else if (!music.isVictoryMusicPlaying()) {
+                // Music finished, reset game (音乐播放结束，重置游戏)
+                game.initBoard();
+                selectedPos = {-1, -1};
+                winner = 0;
+                aiThinking = false;
+                victoryMusicStarted = false;
+                // 重新开启背景音乐
+                music.playBackgroundMusic();
+            }
+        }
+
+        // --- 1.2 BACKGROUND MUSIC LOOP (背景音乐循环维持) ---
+        // MCI 的 repeat 关键字在某些系统上不支持，手动维持循环
+        if (winner == 0 && !victoryMusicStarted && !music.isBackgroundMusicPlaying()) {
+            music.playBackgroundMusic();
+        }
 
         // --- 2. ASYNCHRONOUS AI LOGIC (异步AI逻辑) ---
         if (winner == 0 && game.getCurrentTurn() == Side::SIDE_BLUE) {
@@ -102,10 +149,13 @@ int main() {
             } else if (msg.message == WM_KEYDOWN) {
                 if (msg.vkcode == 'R' || msg.vkcode == 'r') {
                     // Reset game (重置游戏)
+                    music.stopAll();
                     game.initBoard();
                     selectedPos = {-1, -1};
                     winner = 0;
                     aiThinking = false;
+                    victoryMusicStarted = false;
+                    music.playBackgroundMusic();
                 } else if (msg.vkcode == VK_ESCAPE) {
                     // Quit game (退出游戏)
                     running = false;
