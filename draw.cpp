@@ -165,7 +165,7 @@ void Drawer::drawPiece(Pos p, Piece piece, bool isSelected) {
 }
 
 // 绘制游戏 UI 状态
-void Drawer::drawUI(const GameLogic& game, int winner) {
+void Drawer::drawUI(const GameLogic& game, int winner, int difficultyIndex) {
     // 绘制回合状态
     settextcolor(BLACK);
     settextstyle(30, 0, L"微软雅黑");
@@ -187,6 +187,7 @@ void Drawer::drawUI(const GameLogic& game, int winner) {
 
     // 绘制规则说明
     drawRules();
+    drawDifficultySelector(difficultyIndex);
 
     // 绘制胜负信息
     if (winner != 0) {
@@ -200,18 +201,59 @@ void Drawer::drawUI(const GameLogic& game, int winner) {
     }
 }
 
+void Drawer::drawDifficultySelector(int difficultyIndex) {
+    const int panelLeft = 24;
+    const int panelTop = WIN_HEIGHT - 170;
+    const int panelRight = 250;
+    const int panelBottom = WIN_HEIGHT - 24;
+    const int optionLeft = panelLeft + 16;
+    const int optionRight = panelRight - 16;
+    const int optionWidth = optionRight - optionLeft;
+    const int optionHeight = 40;
+    const int firstOptionTop = panelTop + 52;
+    const int secondOptionTop = firstOptionTop + optionHeight + 14;
+
+    setlinecolor(RGB(120, 100, 70));
+    setfillcolor(RGB(240, 226, 190));
+    fillroundrect(panelLeft, panelTop, panelRight, panelBottom, 12, 12);
+
+    setbkmode(TRANSPARENT);
+    settextcolor(RGB(60, 45, 25));
+    settextstyle(24, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    outtextxy(panelLeft + 16, panelTop + 14, L"难度选择");
+
+    setfillcolor(difficultyIndex == 0 ? RGB(214, 122, 76) : RGB(227, 212, 178));
+    setlinecolor(RGB(120, 100, 70));
+    fillroundrect(optionLeft, firstOptionTop, optionRight, firstOptionTop + optionHeight, 10, 10);
+    settextcolor(difficultyIndex == 0 ? WHITE : RGB(75, 55, 35));
+    settextstyle(22, 0, L"微软雅黑");
+    const wchar_t* currentText = L"弱鸡";
+    int currentTw = textwidth(currentText);
+    int currentTh = textheight(currentText);
+    outtextxy(optionLeft + (optionWidth - currentTw) / 2, firstOptionTop + (optionHeight - currentTh) / 2, currentText);
+
+    setfillcolor(difficultyIndex == 1 ? RGB(68, 110, 188) : RGB(210, 220, 240));
+    setlinecolor(RGB(90, 110, 150));
+    fillroundrect(optionLeft, secondOptionTop, optionRight, secondOptionTop + optionHeight, 10, 10);
+    settextcolor(difficultyIndex == 1 ? WHITE : RGB(55, 75, 120));
+    const wchar_t* reservedText = L"太逗";
+    int reservedTw = textwidth(reservedText);
+    int reservedTh = textheight(reservedText);
+    outtextxy(optionLeft + (optionWidth - reservedTw) / 2, secondOptionTop + (optionHeight - reservedTh) / 2, reservedText);
+}
+
 // 绘制右侧规则说明
 void Drawer::drawRules() {
     int startX = OFFSET_X + (GameLogic::COLS - 1) * GRID_W + 40;
     int startY = 100;
     
     settextcolor(RGB(50, 50, 50));
-    settextstyle(24, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    settextstyle(28, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
     outtextxy(startX, startY, L"游戏规则说明：");
     
-    settextstyle(18, 0, L"微软雅黑");
-    int lineHeight = 28;
-    int curY = startY + 40;
+    settextstyle(22, 0, L"微软雅黑");
+    int lineHeight = 32;
+    int curY = startY + 44;
     
     const wchar_t* rules[] = {
         L"1. 翻棋模式：初始棋子背面朝上",
@@ -235,6 +277,23 @@ void Drawer::drawRules() {
         outtextxy(startX, curY, rule);
         curY += lineHeight;
     }
+}
+
+int Drawer::hitTestDifficultyOption(int x, int y) const {
+    const int panelTop = WIN_HEIGHT - 170;
+    const int optionLeft = 40;
+    const int optionRight = 234;
+    const int optionHeight = 40;
+    const int firstOptionTop = panelTop + 52;
+    const int secondOptionTop = firstOptionTop + optionHeight + 14;
+
+    if (x >= optionLeft && x <= optionRight && y >= firstOptionTop && y <= firstOptionTop + optionHeight) {
+        return 0;
+    }
+    if (x >= optionLeft && x <= optionRight && y >= secondOptionTop && y <= secondOptionTop + optionHeight) {
+        return 1;
+    }
+    return -1;
 }
 
 // 屏幕坐标转棋盘网格坐标

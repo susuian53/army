@@ -1,8 +1,15 @@
-﻿#pragma once
+#pragma once
+#include <chrono>
 #include <vector>
 
 // 阵营枚举
 enum class Side { SIDE_RED, SIDE_BLUE, SIDE_NONE };
+
+// 难度模式
+enum class DifficultyMode {
+    CLASSIC = 0,
+    OPEN_STRONG = 1
+};
 
 // 棋子类型枚举
 enum class PieceType { 
@@ -44,6 +51,8 @@ public:
     
     GameLogic();
     void initBoard(); // 初始化棋盘
+    void setDifficultyMode(DifficultyMode mode) { difficultyMode = mode; }
+    DifficultyMode getDifficultyMode() const { return difficultyMode; }
     
     Piece getPiece(Pos p) const; // 获取指定位置的棋子
     Side getCurrentTurn() const { return currentTurn; } // 获取当前回合
@@ -62,9 +71,28 @@ public:
     bool areConnected(Pos from, Pos to) const; // 两个位置是否有线条连接
 
 private:
+    struct Action {
+        bool isFlip;
+        Pos from;
+        Pos to;
+    };
+
     Piece board[ROWS][COLS]; // 棋盘数组
     Side currentTurn;         // 当前回合阵营
+    DifficultyMode difficultyMode; // 当前难度模式
     
     int getRank(PieceType t) const; // 获取棋子等级
     bool canEat(Piece attacker, Piece target) const; // 判断是否可以吃子
+    void revealAllPieces();
+    std::vector<Action> generateActions(bool allowFlip) const;
+    void applyAction(const Action& action);
+    int evaluateBoard(Side side) const;
+    int evaluateMaterial(Side side) const;
+    int evaluateFlagSafety(Side side) const;
+    int countMobility(Side side) const;
+    int scoreActionForOrdering(const Action& action) const;
+    int alphaBeta(int depth, int alpha, int beta, Side maximizingSide,
+        std::chrono::steady_clock::time_point deadline, bool& timedOut) const;
+    void aiMoveClassic();
+    void aiMoveOpenStrong();
 };

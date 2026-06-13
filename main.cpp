@@ -1,8 +1,10 @@
-﻿#include "game.h"
+#include "game.h"
 #include "draw.h"
 #include "music.h"
 #include <windows.h>
 #include <chrono>
+#include <fstream>
+#include <sstream>
 
 // 根据可执行文件路径解析音乐文件夹（支持从不同目录启动）
 std::wstring resolveMusicFolder() {
@@ -22,6 +24,42 @@ std::wstring resolveMusicFolder() {
     return path;
 }
 
+// #region debug-point A:report-helper
+namespace {
+struct DebugConfig {
+    std::string url = "http://127.0.0.1:7777/event";
+    std::string sessionId = "ai-turn-stuck";
+};
+
+DebugConfig loadDebugConfig() {
+    DebugConfig cfg;
+    std::ifstream in(".dbg/ai-turn-stuck.env");
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.rfind("DEBUG_SERVER_URL=", 0) == 0) cfg.url = line.substr(17);
+        if (line.rfind("DEBUG_SESSION_ID=", 0) == 0) cfg.sessionId = line.substr(17);
+    }
+    return cfg;
+}
+
+void debugReport(const char* hypothesisId, const char* location, const std::string& msg, const std::string& dataJson) {
+    static DebugConfig cfg = loadDebugConfig();
+    std::string body =
+        "{\"sessionId\":\"" + cfg.sessionId +
+        "\",\"runId\":\"pre-fix\"" +
+        ",\"hypothesisId\":\"" + std::string(hypothesisId) +
+        "\",\"location\":\"" + std::string(location) +
+        "\",\"msg\":\"[DEBUG] " + msg +
+        "\",\"data\":" + dataJson + "}";
+    std::string cmd =
+        "powershell -NoProfile -Command \"try { Invoke-WebRequest -UseBasicParsing -Uri '" + cfg.url +
+        "' -Method Post -ContentType 'application/json' -Body '" + body +
+        "' | Out-Null } catch {}\" >nul 2>nul";
+    std::system(cmd.c_str());
+}
+} // namespace
+// #endregion
+
 int main() {
     // 1. Initialize graphics window (初始化图形窗口)
     initgraph(Drawer::WIN_WIDTH, Drawer::WIN_HEIGHT);
@@ -33,8 +71,24 @@ int main() {
 
     Pos selectedPos = {-1, -1};
     int winner = 0;
+    int difficultyIndex = 0;
     bool running = true;
     bool victoryMusicStarted = false;
+    auto aiTurnStartTime = std::chrono::steady_clock::now();
+    bool aiThinking = false;
+
+    auto resetGame = [&](bool restartMusic) {
+        game.setDifficultyMode(difficultyIndex == 0 ? DifficultyMode::CLASSIC : DifficultyMode::OPEN_STRONG);
+        game.initBoard();
+        selectedPos = {-1, -1};
+        winner = 0;
+        aiThinking = false;
+        victoryMusicStarted = false;
+        if (restartMusic) {
+            music.stopAll();
+            music.playBackgroundMusic();
+        }
+    };
 
     // 设置音乐文件夹并启动背景音乐（使用相对路径解析）
     std::wstring musicFolder = resolveMusicFolder();
@@ -44,9 +98,6 @@ int main() {
     // 2. High-precision timers for interaction (高精度计时器)
     auto lastClickTime = std::chrono::steady_clock::now();
     Pos lastClickPos = {-1, -1};
-    
-    auto aiTurnStartTime = std::chrono::steady_clock::now();
-    bool aiThinking = false;
 
     ExMessage msg;
 
@@ -61,11 +112,7 @@ int main() {
                 victoryMusicStarted = true;
             } else if (!music.isVictoryMusicPlaying()) {
                 // Music finished, reset game (音乐播放结束，重置游戏)
-                game.initBoard();
-                selectedPos = {-1, -1};
-                winner = 0;
-                aiThinking = false;
-                victoryMusicStarted = false;
+                resetGame(false);
                 // 重新开启背景音乐
                 music.playBackgroundMusic();
             }
@@ -82,11 +129,20 @@ int main() {
             if (!aiThinking) {
                 aiThinking = true;
                 aiTurnStartTime = std::chrono::steady_clock::now();
+                // #region debug-point D:ai-turn-start
+                debugReport("D", "main.cpp:128", "ai turn entered", "{\"difficultyIndex\":" + std::to_string(difficultyIndex) + "}");
+                // #endregion
             } else {
                 auto now = std::chrono::steady_clock::now();
                 // AI moves after 600ms delay (AI思考延迟)
                 if (std::chrono::duration_cast<std::chrono::milliseconds>(now - aiTurnStartTime).count() > 600) {
+                    // #region debug-point A:before-ai-move
+                    debugReport("A", "main.cpp:134", "calling game.aiMove", "{\"waitMs\":" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(now - aiTurnStartTime).count()) + "}");
+                    // #endregion
                     game.aiMove();
+                    // #region debug-point D:after-ai-move
+                    debugReport("D", "main.cpp:137", "game.aiMove returned", "{\"elapsedMs\":" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - aiTurnStartTime).count()) + ",\"nextTurn\":" + std::to_string(static_cast<int>(game.getCurrentTurn())) + "}");
+                    // #endregion
                     aiThinking = false;
                 }
             }
@@ -97,12 +153,25 @@ int main() {
         // --- 3. RENDERING (Double Buffering) (渲染逻辑) ---
         BeginBatchDraw();
         drawer.drawBoard(game, selectedPos);
-        drawer.drawUI(game, winner);
+        drawer.drawUI(game, winner, difficultyIndex);
         EndBatchDraw();
 
         // --- 4. INPUT PROCESSING (消息处理) ---
         while (peekmessage(&msg, EM_MOUSE | EM_KEY)) {
-            if (msg.message == WM_LBUTTONDOWN && winner == 0) {
+            if (msg.message == WM_LBUTTONDOWN) {
+                int difficultyHit = drawer.hitTestDifficultyOption(msg.x, msg.y);
+                if (difficultyHit != -1) {
+                    if (difficultyHit != difficultyIndex) {
+                        difficultyIndex = difficultyHit;
+                        resetGame(true);
+                    }
+                    continue;
+                }
+
+                if (winner != 0 || game.getCurrentTurn() != Side::SIDE_RED) {
+                    continue;
+                }
+
                 Pos clickedPos = drawer.screenToBoard(msg.x, msg.y);
                 Piece p = game.getPiece(clickedPos);
                 
@@ -149,13 +218,7 @@ int main() {
             } else if (msg.message == WM_KEYDOWN) {
                 if (msg.vkcode == 'R' || msg.vkcode == 'r') {
                     // Reset game (重置游戏)
-                    music.stopAll();
-                    game.initBoard();
-                    selectedPos = {-1, -1};
-                    winner = 0;
-                    aiThinking = false;
-                    victoryMusicStarted = false;
-                    music.playBackgroundMusic();
+                    resetGame(true);
                 } else if (msg.vkcode == VK_ESCAPE) {
                     // Quit game (退出游戏)
                     running = false;

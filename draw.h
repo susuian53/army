@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "game.h"
 #include "easyx_config.h"
 #include <string>
@@ -16,8 +16,10 @@ public:
 
     void drawBoard(const GameLogic& game, Pos selectedPos); // 绘制整个棋盘
     void drawPiece(Pos p, Piece piece, bool isSelected);   // 绘制单个棋子
-    void drawUI(const GameLogic& game, int winner);         // 绘制 UI 状态信息
+    void drawUI(const GameLogic& game, int winner, int difficultyIndex); // 绘制 UI 状态信息
     void drawRules();                                       // 绘制右侧规则说明
+    void drawDifficultySelector(int difficultyIndex);       // 绘制左下角难度选择
+    int hitTestDifficultyOption(int x, int y) const;        // 点击命中难度选项
     Pos screenToBoard(int x, int y);                        // 屏幕坐标转棋盘坐标
     void showMessage(const std::string& msg);               // 显示提示消息
 };

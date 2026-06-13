@@ -1,9 +1,74 @@
-﻿#include "game.h"
+#include "game.h"
 #include <algorithm>
-#include <random>
+#include <chrono>
+#include <fstream>
+#include <limits>
+#include <sstream>
 #include <ctime>
+#include <random>
+
+namespace {
+// #region debug-point A:report-helper
+struct DebugConfig {
+    std::string url = "http://127.0.0.1:7777/event";
+    std::string sessionId = "ai-turn-stuck";
+};
+
+DebugConfig loadDebugConfig() {
+    DebugConfig cfg;
+    std::ifstream in(".dbg/ai-turn-stuck.env");
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.rfind("DEBUG_SERVER_URL=", 0) == 0) cfg.url = line.substr(17);
+        if (line.rfind("DEBUG_SESSION_ID=", 0) == 0) cfg.sessionId = line.substr(17);
+    }
+    return cfg;
+}
+
+void debugReport(const char* hypothesisId, const char* location, const std::string& msg, const std::string& dataJson) {
+    static DebugConfig cfg = loadDebugConfig();
+    std::string body =
+        "{\"sessionId\":\"" + cfg.sessionId +
+        "\",\"runId\":\"pre-fix\"" +
+        ",\"hypothesisId\":\"" + std::string(hypothesisId) +
+        "\",\"location\":\"" + std::string(location) +
+        "\",\"msg\":\"[DEBUG] " + msg +
+        "\",\"data\":" + dataJson + "}";
+    std::string cmd =
+        "powershell -NoProfile -Command \"try { Invoke-WebRequest -UseBasicParsing -Uri '" + cfg.url +
+        "' -Method Post -ContentType 'application/json' -Body '" + body +
+        "' | Out-Null } catch {}\" >nul 2>nul";
+    std::system(cmd.c_str());
+}
+// #endregion
+
+int pieceBaseValue(PieceType t) {
+    switch (t) {
+        case PieceType::PT_FLAG:       return 20000;
+        case PieceType::PT_COMMANDER:  return 3200;
+        case PieceType::PT_CORPS:      return 2500;
+        case PieceType::PT_DIVISION:   return 1900;
+        case PieceType::PT_BRIGADE:    return 1500;
+        case PieceType::PT_REGIMENT:   return 1100;
+        case PieceType::PT_BATTALION:  return 850;
+        case PieceType::PT_COMPANY:    return 650;
+        case PieceType::PT_PLATOON:    return 480;
+        case PieceType::PT_ENGINEER:   return 950;
+        case PieceType::PT_BOMB:       return 1600;
+        case PieceType::PT_MINE:       return 900;
+        default: return 0;
+    }
+}
+
+Side oppositeSide(Side side) {
+    if (side == Side::SIDE_RED) return Side::SIDE_BLUE;
+    if (side == Side::SIDE_BLUE) return Side::SIDE_RED;
+    return Side::SIDE_NONE;
+}
+} // namespace
 
 GameLogic::GameLogic() {
+    difficultyMode = DifficultyMode::CLASSIC;
     initBoard();
 }
 
@@ -97,9 +162,12 @@ void GameLogic::initBoard() {
     }
 
     // Ensure all are hidden initially
-    for(int r=0; r<ROWS; r++) for(int c=0; c<COLS; c++) {
-        if(board[r][c].type != PieceType::PT_EMPTY) board[r][c].isVisible = false;
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            if (board[r][c].type != PieceType::PT_EMPTY) board[r][c].isVisible = false;
+        }
     }
+
 }
 
 // Flip a piece
@@ -115,6 +183,16 @@ bool GameLogic::flipPiece(Pos p) {
 Piece GameLogic::getPiece(Pos p) const {
     if (!isWithinBoard(p)) return Piece();
     return board[p.r][p.c];
+}
+
+void GameLogic::revealAllPieces() {
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            if (board[r][c].type != PieceType::PT_EMPTY) {
+                board[r][c].isVisible = true;
+            }
+        }
+    }
 }
 
 void GameLogic::switchTurn() {
@@ -326,25 +404,23 @@ int GameLogic::checkWinner() {
     return 0; // Ongoing
 }
 
-// Simple AI logic for random moves/flips
-void GameLogic::aiMove() {
-    struct Action { bool isFlip; Pos from; Pos to; };
+std::vector<GameLogic::Action> GameLogic::generateActions(bool allowFlip) const {
     std::vector<Action> actions;
 
-    // Find all possible flips
-    for (int r = 0; r < ROWS; r++) {
-        for (int c = 0; c < COLS; c++) {
-            if (board[r][c].type != PieceType::PT_EMPTY && !board[r][c].isVisible) {
-                actions.push_back({true, {r, c}, {r, c}});
+    if (allowFlip) {
+        for (int r = 0; r < ROWS; r++) {
+            for (int c = 0; c < COLS; c++) {
+                if (board[r][c].type != PieceType::PT_EMPTY && !board[r][c].isVisible) {
+                    actions.push_back({true, {r, c}, {r, c}});
+                }
             }
         }
     }
 
-    // Find all possible moves for AI (Blue)
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             Pos from = {r, c};
-            if (board[r][c].isVisible && board[r][c].side == Side::SIDE_BLUE) {
+            if (board[r][c].isVisible && board[r][c].side == currentTurn) {
                 for (int tr = 0; tr < ROWS; tr++) {
                     for (int tc = 0; tc < COLS; tc++) {
                         Pos to = {tr, tc};
@@ -357,12 +433,297 @@ void GameLogic::aiMove() {
         }
     }
 
+    return actions;
+}
+
+void GameLogic::applyAction(const Action& action) {
+    if (action.isFlip) {
+        flipPiece(action.from);
+    } else {
+        movePiece(action.from, action.to);
+    }
+}
+
+int GameLogic::evaluateMaterial(Side side) const {
+    const Side enemy = oppositeSide(side);
+    bool enemyHasMines = false;
+    bool ownHasMines = false;
+
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            if (board[r][c].type == PieceType::PT_MINE) {
+                if (board[r][c].side == side) ownHasMines = true;
+                if (board[r][c].side == enemy) enemyHasMines = true;
+            }
+        }
+    }
+
+    int score = 0;
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            Pos p = {r, c};
+            const Piece& piece = board[r][c];
+            if (piece.type == PieceType::PT_EMPTY) continue;
+
+            int value = pieceBaseValue(piece.type);
+            if (piece.type == PieceType::PT_ENGINEER) {
+                if (piece.side == side && enemyHasMines) value += 300;
+                if (piece.side == enemy && ownHasMines) value += 300;
+            }
+            if (piece.type == PieceType::PT_MINE && isHeadquarters(p)) value += 250;
+            if (piece.type != PieceType::PT_FLAG && piece.type != PieceType::PT_MINE) {
+                if (isRailway(p)) value += 40;
+                if (isSafeZone(p)) value += 25;
+            }
+
+            score += (piece.side == side) ? value : -value;
+        }
+    }
+    return score;
+}
+
+int GameLogic::evaluateFlagSafety(Side side) const {
+    const Side enemy = oppositeSide(side);
+    Pos ownFlag = {-1, -1};
+    Pos enemyFlag = {-1, -1};
+
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            if (board[r][c].type == PieceType::PT_FLAG) {
+                if (board[r][c].side == side) ownFlag = {r, c};
+                if (board[r][c].side == enemy) enemyFlag = {r, c};
+            }
+        }
+    }
+
+    auto scoreSingleFlag = [&](Pos flagPos, Side owner) {
+        if (flagPos.r == -1) return -30000;
+
+        int value = isHeadquarters(flagPos) ? 900 : 0;
+        for (int dr = -1; dr <= 1; dr++) {
+            for (int dc = -1; dc <= 1; dc++) {
+                if (dr == 0 && dc == 0) continue;
+                Pos np = {flagPos.r + dr, flagPos.c + dc};
+                if (!isWithinBoard(np)) continue;
+                const Piece& guard = board[np.r][np.c];
+                if (guard.type == PieceType::PT_EMPTY) continue;
+                if (guard.side == owner) {
+                    if (guard.type == PieceType::PT_MINE) value += 450;
+                    else if (guard.type == PieceType::PT_BOMB) value += 260;
+                    else value += 90;
+                } else if (guard.isVisible) {
+                    value -= 180;
+                }
+            }
+        }
+        return value;
+    };
+
+    return scoreSingleFlag(ownFlag, side) - scoreSingleFlag(enemyFlag, enemy);
+}
+
+int GameLogic::countMobility(Side side) const {
+    GameLogic temp = *this;
+    temp.currentTurn = side;
+    return static_cast<int>(temp.generateActions(false).size());
+}
+
+int GameLogic::evaluateBoard(Side side) const {
+    GameLogic temp = *this;
+    int winner = temp.checkWinner();
+    if (winner != 0) {
+        Side winnerSide = (winner == 1) ? Side::SIDE_RED : Side::SIDE_BLUE;
+        return (winnerSide == side) ? 100000000 : -100000000;
+    }
+
+    Side enemy = oppositeSide(side);
+    int score = 0;
+    score += evaluateMaterial(side);
+    score += evaluateFlagSafety(side);
+    score += 12 * (countMobility(side) - countMobility(enemy));
+
+    GameLogic ownView = *this;
+    ownView.currentTurn = side;
+    for (const Action& action : ownView.generateActions(false)) {
+        const Piece& target = board[action.to.r][action.to.c];
+        if (target.type != PieceType::PT_EMPTY && target.side == enemy) {
+            score += pieceBaseValue(target.type) / 8;
+        }
+    }
+
+    GameLogic enemyView = *this;
+    enemyView.currentTurn = enemy;
+    for (const Action& action : enemyView.generateActions(false)) {
+        const Piece& target = board[action.to.r][action.to.c];
+        if (target.type != PieceType::PT_EMPTY && target.side == side) {
+            score -= pieceBaseValue(target.type) / 8;
+        }
+    }
+
+    return score;
+}
+
+int GameLogic::scoreActionForOrdering(const Action& action) const {
+    if (action.isFlip) {
+        if (difficultyMode != DifficultyMode::OPEN_STRONG) return 50;
+
+        const Piece& piece = board[action.from.r][action.from.c];
+        int score = pieceBaseValue(piece.type) / 5;
+        if (piece.side == currentTurn) score += 400;
+        else score -= 250;
+        return score;
+    }
+
+    const Piece& mover = board[action.from.r][action.from.c];
+    const Piece& target = board[action.to.r][action.to.c];
+    int score = 0;
+
+    if (target.type != PieceType::PT_EMPTY) {
+        score += 50000 + pieceBaseValue(target.type) - pieceBaseValue(mover.type) / 10;
+    }
+
+    if (isRailway(action.to)) score += 120;
+    if (isSafeZone(action.to)) score += 40;
+
+    if (currentTurn == Side::SIDE_BLUE) score += (action.to.r - action.from.r) * 10;
+    if (currentTurn == Side::SIDE_RED) score += (action.from.r - action.to.r) * 10;
+
+    return score;
+}
+
+int GameLogic::alphaBeta(int depth, int alpha, int beta, Side maximizingSide,
+    std::chrono::steady_clock::time_point deadline, bool& timedOut) const {
+    if (timedOut) return 0;
+    if (std::chrono::steady_clock::now() >= deadline) {
+        timedOut = true;
+        return 0;
+    }
+
+    GameLogic terminal = *this;
+    if (depth == 0 || terminal.checkWinner() != 0) {
+        return evaluateBoard(maximizingSide);
+    }
+
+    std::vector<Action> actions = generateActions(difficultyMode == DifficultyMode::OPEN_STRONG);
+    if (actions.empty()) {
+        return evaluateBoard(maximizingSide);
+    }
+
+    std::sort(actions.begin(), actions.end(), [&](const Action& a, const Action& b) {
+        return scoreActionForOrdering(a) > scoreActionForOrdering(b);
+    });
+
+    const bool maximizing = (currentTurn == maximizingSide);
+    if (maximizing) {
+        int bestScore = std::numeric_limits<int>::min();
+        for (const Action& action : actions) {
+            GameLogic next = *this;
+            next.applyAction(action);
+            int score = next.alphaBeta(depth - 1, alpha, beta, maximizingSide, deadline, timedOut);
+            if (timedOut) return 0;
+            bestScore = std::max(bestScore, score);
+            alpha = std::max(alpha, bestScore);
+            if (alpha >= beta) break;
+        }
+        return bestScore;
+    }
+
+    int bestScore = std::numeric_limits<int>::max();
+    for (const Action& action : actions) {
+        GameLogic next = *this;
+        next.applyAction(action);
+        int score = next.alphaBeta(depth - 1, alpha, beta, maximizingSide, deadline, timedOut);
+        if (timedOut) return 0;
+        bestScore = std::min(bestScore, score);
+        beta = std::min(beta, bestScore);
+        if (alpha >= beta) break;
+    }
+    return bestScore;
+}
+
+void GameLogic::aiMoveClassic() {
+    std::vector<Action> actions = generateActions(true);
+
     if (!actions.empty()) {
         std::random_device rd;
         std::mt19937 g(rd());
         std::uniform_int_distribution<> dis(0, (int)actions.size() - 1);
         Action a = actions[dis(g)];
-        if (a.isFlip) flipPiece(a.from);
-        else movePiece(a.from, a.to);
+        applyAction(a);
     }
+}
+
+void GameLogic::aiMoveOpenStrong() {
+    std::vector<Action> actions = generateActions(true);
+    // #region debug-point B:open-strong-entry
+    debugReport("B", "game.cpp:655", "open strong ai entered", "{\"actionCount\":" + std::to_string(actions.size()) + "}");
+    // #endregion
+    if (actions.empty()) {
+        // #region debug-point B:empty-actions
+        debugReport("B", "game.cpp:658", "open strong ai has no actions", "{}");
+        // #endregion
+        return;
+    }
+
+    std::sort(actions.begin(), actions.end(), [&](const Action& a, const Action& b) {
+        return scoreActionForOrdering(a) > scoreActionForOrdering(b);
+    });
+
+    Action bestAction = actions.front();
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1400);
+
+    for (int depth = 1; depth <= 5; depth++) {
+        if (std::chrono::steady_clock::now() >= deadline) break;
+        // #region debug-point C:depth-start
+        debugReport("C", "game.cpp:668", "search depth start", "{\"depth\":" + std::to_string(depth) + ",\"actionCount\":" + std::to_string(actions.size()) + "}");
+        // #endregion
+
+        bool timedOut = false;
+        int bestScore = std::numeric_limits<int>::min();
+        Action depthBest = bestAction;
+
+        for (const Action& action : actions) {
+            GameLogic next = *this;
+            next.applyAction(action);
+            int score = next.alphaBeta(
+                depth - 1,
+                std::numeric_limits<int>::min() / 2,
+                std::numeric_limits<int>::max() / 2,
+                Side::SIDE_BLUE,
+                deadline,
+                timedOut);
+
+            if (timedOut) break;
+
+            if (score > bestScore ||
+                (score == bestScore && scoreActionForOrdering(action) > scoreActionForOrdering(depthBest))) {
+                bestScore = score;
+                depthBest = action;
+            }
+        }
+
+        if (timedOut) {
+            // #region debug-point C:depth-timeout
+            debugReport("C", "game.cpp:690", "search depth timeout", "{\"depth\":" + std::to_string(depth) + "}");
+            // #endregion
+            break;
+        }
+        bestAction = depthBest;
+
+        std::stable_sort(actions.begin(), actions.end(), [&](const Action& a, const Action& b) {
+            if (a.from == bestAction.from && a.to == bestAction.to && a.isFlip == bestAction.isFlip) return true;
+            if (b.from == bestAction.from && b.to == bestAction.to && b.isFlip == bestAction.isFlip) return false;
+            return scoreActionForOrdering(a) > scoreActionForOrdering(b);
+        });
+    }
+
+    // #region debug-point E:apply-best-action
+    debugReport("E", "game.cpp:702", "applying best action", "{\"isFlip\":" + std::to_string(bestAction.isFlip ? 1 : 0) + ",\"fromR\":" + std::to_string(bestAction.from.r) + ",\"fromC\":" + std::to_string(bestAction.from.c) + ",\"toR\":" + std::to_string(bestAction.to.r) + ",\"toC\":" + std::to_string(bestAction.to.c) + "}");
+    // #endregion
+    applyAction(bestAction);
+}
+
+void GameLogic::aiMove() {
+    if (difficultyMode == DifficultyMode::OPEN_STRONG) aiMoveOpenStrong();
+    else aiMoveClassic();
 }
