@@ -165,7 +165,8 @@ void Drawer::drawPiece(Pos p, Piece piece, bool isSelected) {
 }
 
 // 绘制游戏 UI 状态
-void Drawer::drawUI(const GameLogic& game, int winner, int difficultyIndex) {
+void Drawer::drawUI(const GameLogic& game, int winner, int difficultyIndex, int volume, bool musicEnabled,
+    const std::wstring& announcementText, bool inspectArmed, int inspectCooldownTurns) {
     // 绘制回合状态
     settextcolor(BLACK);
     settextstyle(30, 0, L"微软雅黑");
@@ -185,8 +186,12 @@ void Drawer::drawUI(const GameLogic& game, int winner, int difficultyIndex) {
     
     outtextxy(20, 20, turnStr.c_str());
 
+    drawSystemAnnouncement(announcementText);
+
     // 绘制规则说明
     drawRules();
+    drawAudioControls(volume, musicEnabled);
+    drawInspectSkillPanel(inspectArmed, inspectCooldownTurns, difficultyIndex == 0);
     drawDifficultySelector(difficultyIndex);
 
     // 绘制胜负信息
@@ -199,6 +204,148 @@ void Drawer::drawUI(const GameLogic& game, int winner, int difficultyIndex) {
         int th = textheight(winStr);
         outtextxy((WIN_WIDTH - tw) / 2, (WIN_HEIGHT - th) / 2, winStr);
     }
+}
+
+void Drawer::drawSystemAnnouncement(const std::wstring& announcementText) {
+    const int panelLeft = 18;
+    const int panelTop = 58;
+    const int panelRight = 252;
+    const int panelBottom = 148;
+
+    setlinecolor(RGB(110, 92, 64));
+    setfillcolor(RGB(245, 236, 214));
+    fillroundrect(panelLeft, panelTop, panelRight, panelBottom, 10, 10);
+
+    setbkmode(TRANSPARENT);
+    settextcolor(RGB(75, 55, 35));
+    settextstyle(20, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    outtextxy(panelLeft + 14, panelTop + 10, L"调试信息");
+
+    settextcolor(RGB(70, 70, 70));
+    settextstyle(16, 0, L"微软雅黑");
+    outtextxy(panelLeft + 14, panelTop + 38, announcementText.c_str());
+}
+
+void Drawer::drawAudioControls(int volume, bool musicEnabled) {
+    const int panelLeft = 24;
+    const int panelTop = 250;
+    const int panelRight = 250;
+    const int panelBottom = 460;
+    const int contentLeft = panelLeft + 16;
+    const int contentRight = panelRight - 16;
+    const int buttonTop = panelTop + 78;
+    const int buttonBottom = buttonTop + 34;
+    const int minusLeft = contentLeft;
+    const int minusRight = minusLeft + 34;
+    const int plusRight = contentRight;
+    const int plusLeft = plusRight - 34;
+    const int sliderLeft = minusRight + 12;
+    const int sliderRight = plusLeft - 12;
+    const int sliderTop = panelTop + 88;
+    const int sliderBottom = sliderTop + 14;
+    const int toggleTop = panelTop + 126;
+    const int toggleBottom = toggleTop + 40;
+
+    int clampedVolume = volume;
+    if (clampedVolume < 0) clampedVolume = 0;
+    if (clampedVolume > 1000) clampedVolume = 1000;
+
+    setlinecolor(RGB(120, 100, 70));
+    setfillcolor(RGB(240, 226, 190));
+    fillroundrect(panelLeft, panelTop, panelRight, panelBottom, 12, 12);
+
+    setbkmode(TRANSPARENT);
+    settextcolor(RGB(60, 45, 25));
+    settextstyle(24, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    outtextxy(panelLeft + 16, panelTop + 14, L"音频设置");
+
+    settextstyle(20, 0, L"微软雅黑");
+    std::wstring volumeText = L"音量：" + std::to_wstring(clampedVolume / 10) + L"%";
+    outtextxy(contentLeft, panelTop + 48, volumeText.c_str());
+
+    setfillcolor(RGB(225, 210, 180));
+    fillroundrect(minusLeft, buttonTop, minusRight, buttonBottom, 8, 8);
+    fillroundrect(plusLeft, buttonTop, plusRight, buttonBottom, 8, 8);
+    settextcolor(RGB(75, 55, 35));
+    settextstyle(24, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    const wchar_t* minusText = L"-";
+    const wchar_t* plusText = L"+";
+    int minusTw = textwidth(minusText);
+    int minusTh = textheight(minusText);
+    int plusTw = textwidth(plusText);
+    int plusTh = textheight(plusText);
+    outtextxy(minusLeft + (34 - minusTw) / 2, buttonTop + (34 - minusTh) / 2 - 2, minusText);
+    outtextxy(plusLeft + (34 - plusTw) / 2, buttonTop + (34 - plusTh) / 2 - 2, plusText);
+
+    setfillcolor(RGB(210, 196, 165));
+    fillroundrect(sliderLeft, sliderTop, sliderRight, sliderBottom, 8, 8);
+
+    int filledRight = sliderLeft + (sliderRight - sliderLeft) * clampedVolume / 1000;
+    setfillcolor(musicEnabled ? RGB(214, 122, 76) : RGB(160, 160, 160));
+    fillroundrect(sliderLeft, sliderTop, filledRight, sliderBottom, 8, 8);
+
+    int knobX = filledRight;
+    if (knobX < sliderLeft) knobX = sliderLeft;
+    if (knobX > sliderRight) knobX = sliderRight;
+    setfillcolor(RGB(250, 245, 235));
+    setlinecolor(RGB(120, 100, 70));
+    solidcircle(knobX, sliderTop + 7, 10);
+
+    setfillcolor(musicEnabled ? RGB(68, 110, 188) : RGB(165, 165, 165));
+    setlinecolor(RGB(90, 110, 150));
+    fillroundrect(contentLeft, toggleTop, contentRight, toggleBottom, 10, 10);
+    settextcolor(WHITE);
+    settextstyle(22, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    const wchar_t* toggleText = musicEnabled ? L"背景音乐：开启" : L"背景音乐：关闭";
+    int toggleTw = textwidth(toggleText);
+    int toggleTh = textheight(toggleText);
+    outtextxy(contentLeft + (contentRight - contentLeft - toggleTw) / 2, toggleTop + (40 - toggleTh) / 2 - 1, toggleText);
+}
+
+void Drawer::drawInspectSkillPanel(bool inspectArmed, int inspectCooldownTurns, bool defaultMode) {
+    const int panelLeft = 24;
+    const int panelTop = 470;
+    const int panelRight = 250;
+    const int panelBottom = 610;
+    const int buttonLeft = panelLeft + 16;
+    const int buttonRight = panelRight - 16;
+    const int buttonTop = panelTop + 58;
+    const int buttonBottom = buttonTop + 42;
+
+    setlinecolor(RGB(120, 100, 70));
+    setfillcolor(RGB(240, 226, 190));
+    fillroundrect(panelLeft, panelTop, panelRight, panelBottom, 12, 12);
+
+    setbkmode(TRANSPARENT);
+    settextcolor(RGB(60, 45, 25));
+    settextstyle(24, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    outtextxy(panelLeft + 16, panelTop + 14, L"技能");
+
+    bool enabled = defaultMode && inspectCooldownTurns == 0;
+    setfillcolor(enabled ? (inspectArmed ? RGB(214, 122, 76) : RGB(68, 110, 188)) : RGB(170, 170, 170));
+    setlinecolor(RGB(90, 110, 150));
+    fillroundrect(buttonLeft, buttonTop, buttonRight, buttonBottom, 10, 10);
+
+    settextcolor(WHITE);
+    settextstyle(22, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    const wchar_t* buttonText = enabled ? (inspectArmed ? L"请点击一张牌" : L"我要验牌") : L"我要验牌";
+    int textWidthPx = textwidth(buttonText);
+    int textHeightPx = textheight(buttonText);
+    outtextxy(buttonLeft + (buttonRight - buttonLeft - textWidthPx) / 2, buttonTop + (buttonBottom - buttonTop - textHeightPx) / 2 - 1, buttonText);
+
+    settextcolor(RGB(75, 55, 35));
+    settextstyle(16, 0, L"微软雅黑");
+    std::wstring hintText;
+    if (!defaultMode) {
+        hintText = L"明棋模式无需验牌";
+    } else if (inspectCooldownTurns > 0) {
+        hintText = L"冷却中：" + std::to_wstring(inspectCooldownTurns) + L"回合";
+    } else if (inspectArmed) {
+        hintText = L"点击任意棋子查看牌面";
+    } else {
+        hintText = L"默认模式可用";
+    }
+    outtextxy(buttonLeft, panelTop + 108, hintText.c_str());
 }
 
 void Drawer::drawDifficultySelector(int difficultyIndex) {
@@ -220,14 +367,14 @@ void Drawer::drawDifficultySelector(int difficultyIndex) {
     setbkmode(TRANSPARENT);
     settextcolor(RGB(60, 45, 25));
     settextstyle(24, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
-    outtextxy(panelLeft + 16, panelTop + 14, L"难度选择");
+    outtextxy(panelLeft + 16, panelTop + 14, L"模式选择");
 
     setfillcolor(difficultyIndex == 0 ? RGB(214, 122, 76) : RGB(227, 212, 178));
     setlinecolor(RGB(120, 100, 70));
     fillroundrect(optionLeft, firstOptionTop, optionRight, firstOptionTop + optionHeight, 10, 10);
     settextcolor(difficultyIndex == 0 ? WHITE : RGB(75, 55, 35));
     settextstyle(22, 0, L"微软雅黑");
-    const wchar_t* currentText = L"弱鸡";
+    const wchar_t* currentText = L"默认";
     int currentTw = textwidth(currentText);
     int currentTh = textheight(currentText);
     outtextxy(optionLeft + (optionWidth - currentTw) / 2, firstOptionTop + (optionHeight - currentTh) / 2, currentText);
@@ -236,7 +383,7 @@ void Drawer::drawDifficultySelector(int difficultyIndex) {
     setlinecolor(RGB(90, 110, 150));
     fillroundrect(optionLeft, secondOptionTop, optionRight, secondOptionTop + optionHeight, 10, 10);
     settextcolor(difficultyIndex == 1 ? WHITE : RGB(55, 75, 120));
-    const wchar_t* reservedText = L"太逗";
+    const wchar_t* reservedText = L"明棋";
     int reservedTw = textwidth(reservedText);
     int reservedTh = textheight(reservedText);
     outtextxy(optionLeft + (optionWidth - reservedTw) / 2, secondOptionTop + (optionHeight - reservedTh) / 2, reservedText);
@@ -294,6 +441,80 @@ int Drawer::hitTestDifficultyOption(int x, int y) const {
         return 1;
     }
     return -1;
+}
+
+int Drawer::hitTestAudioControl(int x, int y) const {
+    const int panelLeft = 24;
+    const int panelTop = 250;
+    const int panelRight = 250;
+    const int panelBottom = 460;
+    const int contentLeft = panelLeft + 16;
+    const int contentRight = panelRight - 16;
+    const int buttonTop = panelTop + 78;
+    const int buttonBottom = buttonTop + 34;
+    const int minusLeft = contentLeft;
+    const int minusRight = minusLeft + 34;
+    const int plusRight = contentRight;
+    const int plusLeft = plusRight - 34;
+    const int sliderLeft = minusRight + 12;
+    const int sliderRight = plusLeft - 12;
+    const int sliderTop = panelTop + 88;
+    const int sliderBottom = sliderTop + 14;
+    const int toggleTop = panelTop + 126;
+    const int toggleBottom = toggleTop + 40;
+
+    if (x >= panelLeft && x <= panelRight && y >= panelTop && y <= panelBottom) {
+        if (x >= minusLeft && x <= minusRight && y >= buttonTop && y <= buttonBottom) {
+            return 0;
+        }
+        if (x >= plusLeft && x <= plusRight && y >= buttonTop && y <= buttonBottom) {
+            return 1;
+        }
+        if (x >= sliderLeft && x <= sliderRight && y >= sliderTop - 8 && y <= sliderBottom + 8) {
+            return 2;
+        }
+        if (x >= contentLeft && x <= contentRight && y >= toggleTop && y <= toggleBottom) {
+            return 3;
+        }
+    }
+    return -1;
+}
+
+int Drawer::hitTestInspectSkillButton(int x, int y) const {
+    const int panelLeft = 24;
+    const int panelTop = 470;
+    const int panelRight = 250;
+    const int panelBottom = 610;
+    const int buttonLeft = panelLeft + 16;
+    const int buttonRight = panelRight - 16;
+    const int buttonTop = panelTop + 58;
+    const int buttonBottom = buttonTop + 42;
+
+    if (x >= panelLeft && x <= panelRight && y >= panelTop && y <= panelBottom &&
+        x >= buttonLeft && x <= buttonRight && y >= buttonTop && y <= buttonBottom) {
+        return 0;
+    }
+    return -1;
+}
+
+int Drawer::audioVolumeFromSliderX(int x) const {
+    const int panelLeft = 24;
+    const int panelTop = 250;
+    const int panelRight = 250;
+    const int contentLeft = panelLeft + 16;
+    const int contentRight = panelRight - 16;
+    const int minusRight = contentLeft + 34;
+    const int plusLeft = contentRight - 34;
+    const int sliderLeft = minusRight + 12;
+    const int sliderRight = plusLeft - 12;
+
+    int clampedX = x;
+    if (clampedX < sliderLeft) clampedX = sliderLeft;
+    if (clampedX > sliderRight) clampedX = sliderRight;
+
+    int width = sliderRight - sliderLeft;
+    if (width <= 0) return 0;
+    return (clampedX - sliderLeft) * 1000 / width;
 }
 
 // 屏幕坐标转棋盘网格坐标

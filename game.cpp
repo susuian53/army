@@ -1,47 +1,11 @@
 #include "game.h"
 #include <algorithm>
 #include <chrono>
-#include <fstream>
 #include <limits>
-#include <sstream>
 #include <ctime>
 #include <random>
 
 namespace {
-// #region debug-point A:report-helper
-struct DebugConfig {
-    std::string url = "http://127.0.0.1:7777/event";
-    std::string sessionId = "ai-turn-stuck";
-};
-
-DebugConfig loadDebugConfig() {
-    DebugConfig cfg;
-    std::ifstream in(".dbg/ai-turn-stuck.env");
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.rfind("DEBUG_SERVER_URL=", 0) == 0) cfg.url = line.substr(17);
-        if (line.rfind("DEBUG_SESSION_ID=", 0) == 0) cfg.sessionId = line.substr(17);
-    }
-    return cfg;
-}
-
-void debugReport(const char* hypothesisId, const char* location, const std::string& msg, const std::string& dataJson) {
-    static DebugConfig cfg = loadDebugConfig();
-    std::string body =
-        "{\"sessionId\":\"" + cfg.sessionId +
-        "\",\"runId\":\"pre-fix\"" +
-        ",\"hypothesisId\":\"" + std::string(hypothesisId) +
-        "\",\"location\":\"" + std::string(location) +
-        "\",\"msg\":\"[DEBUG] " + msg +
-        "\",\"data\":" + dataJson + "}";
-    std::string cmd =
-        "powershell -NoProfile -Command \"try { Invoke-WebRequest -UseBasicParsing -Uri '" + cfg.url +
-        "' -Method Post -ContentType 'application/json' -Body '" + body +
-        "' | Out-Null } catch {}\" >nul 2>nul";
-    std::system(cmd.c_str());
-}
-// #endregion
-
 int pieceBaseValue(PieceType t) {
     switch (t) {
         case PieceType::PT_FLAG:       return 20000;
@@ -168,6 +132,9 @@ void GameLogic::initBoard() {
         }
     }
 
+    if (difficultyMode == DifficultyMode::OPEN_STRONG) {
+        revealAllPieces();
+    }
 }
 
 // Flip a piece
@@ -564,15 +531,7 @@ int GameLogic::evaluateBoard(Side side) const {
 }
 
 int GameLogic::scoreActionForOrdering(const Action& action) const {
-    if (action.isFlip) {
-        if (difficultyMode != DifficultyMode::OPEN_STRONG) return 50;
-
-        const Piece& piece = board[action.from.r][action.from.c];
-        int score = pieceBaseValue(piece.type) / 5;
-        if (piece.side == currentTurn) score += 400;
-        else score -= 250;
-        return score;
-    }
+    if (action.isFlip) return 50;
 
     const Piece& mover = board[action.from.r][action.from.c];
     const Piece& target = board[action.to.r][action.to.c];
@@ -604,7 +563,7 @@ int GameLogic::alphaBeta(int depth, int alpha, int beta, Side maximizingSide,
         return evaluateBoard(maximizingSide);
     }
 
-    std::vector<Action> actions = generateActions(difficultyMode == DifficultyMode::OPEN_STRONG);
+    std::vector<Action> actions = generateActions(false);
     if (actions.empty()) {
         return evaluateBoard(maximizingSide);
     }
@@ -654,16 +613,8 @@ void GameLogic::aiMoveClassic() {
 }
 
 void GameLogic::aiMoveOpenStrong() {
-    std::vector<Action> actions = generateActions(true);
-    // #region debug-point B:open-strong-entry
-    debugReport("B", "game.cpp:655", "open strong ai entered", "{\"actionCount\":" + std::to_string(actions.size()) + "}");
-    // #endregion
-    if (actions.empty()) {
-        // #region debug-point B:empty-actions
-        debugReport("B", "game.cpp:658", "open strong ai has no actions", "{}");
-        // #endregion
-        return;
-    }
+    std::vector<Action> actions = generateActions(false);
+    if (actions.empty()) return;
 
     std::sort(actions.begin(), actions.end(), [&](const Action& a, const Action& b) {
         return scoreActionForOrdering(a) > scoreActionForOrdering(b);
@@ -674,9 +625,6 @@ void GameLogic::aiMoveOpenStrong() {
 
     for (int depth = 1; depth <= 5; depth++) {
         if (std::chrono::steady_clock::now() >= deadline) break;
-        // #region debug-point C:depth-start
-        debugReport("C", "game.cpp:668", "search depth start", "{\"depth\":" + std::to_string(depth) + ",\"actionCount\":" + std::to_string(actions.size()) + "}");
-        // #endregion
 
         bool timedOut = false;
         int bestScore = std::numeric_limits<int>::min();
@@ -702,12 +650,7 @@ void GameLogic::aiMoveOpenStrong() {
             }
         }
 
-        if (timedOut) {
-            // #region debug-point C:depth-timeout
-            debugReport("C", "game.cpp:690", "search depth timeout", "{\"depth\":" + std::to_string(depth) + "}");
-            // #endregion
-            break;
-        }
+        if (timedOut) break;
         bestAction = depthBest;
 
         std::stable_sort(actions.begin(), actions.end(), [&](const Action& a, const Action& b) {
@@ -717,9 +660,6 @@ void GameLogic::aiMoveOpenStrong() {
         });
     }
 
-    // #region debug-point E:apply-best-action
-    debugReport("E", "game.cpp:702", "applying best action", "{\"isFlip\":" + std::to_string(bestAction.isFlip ? 1 : 0) + ",\"fromR\":" + std::to_string(bestAction.from.r) + ",\"fromC\":" + std::to_string(bestAction.from.c) + ",\"toR\":" + std::to_string(bestAction.to.r) + ",\"toC\":" + std::to_string(bestAction.to.c) + "}");
-    // #endregion
     applyAction(bestAction);
 }
 

@@ -16,9 +16,16 @@ public:
 
     void drawBoard(const GameLogic& game, Pos selectedPos); // 绘制整个棋盘
     void drawPiece(Pos p, Piece piece, bool isSelected);   // 绘制单个棋子
-    void drawUI(const GameLogic& game, int winner, int difficultyIndex); // 绘制 UI 状态信息
+    void drawUI(const GameLogic& game, int winner, int difficultyIndex, int volume, bool musicEnabled,
+        const std::wstring& announcementText, bool inspectArmed, int inspectCooldownTurns); // 绘制 UI 状态信息
     void drawRules();                                       // 绘制右侧规则说明
+    void drawSystemAnnouncement(const std::wstring& announcementText); // 绘制系统公告栏
+    void drawAudioControls(int volume, bool musicEnabled);   // 绘制左侧中部音频控制
+    void drawInspectSkillPanel(bool inspectArmed, int inspectCooldownTurns, bool defaultMode); // 绘制验牌技能面板
     void drawDifficultySelector(int difficultyIndex);       // 绘制左下角难度选择
+    int hitTestAudioControl(int x, int y) const;            // 点击命中音频控制
+    int hitTestInspectSkillButton(int x, int y) const;      // 点击命中验牌技能按钮
+    int audioVolumeFromSliderX(int x) const;                 // 根据滑条位置计算音量
     int hitTestDifficultyOption(int x, int y) const;        // 点击命中难度选项
     Pos screenToBoard(int x, int y);                        // 屏幕坐标转棋盘坐标
     void showMessage(const std::string& msg);               // 显示提示消息
