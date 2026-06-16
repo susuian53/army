@@ -190,6 +190,7 @@ void Drawer::drawUI(const GameLogic& game, int winner, int difficultyIndex, int 
 
     // 绘制规则说明
     drawRules();
+    drawGithubButton();
     drawAudioControls(volume, musicEnabled);
     drawInspectSkillPanel(inspectArmed, inspectCooldownTurns, difficultyIndex == 0);
     drawDifficultySelector(difficultyIndex);
@@ -426,6 +427,30 @@ void Drawer::drawRules() {
     }
 }
 
+void Drawer::drawGithubButton() {
+    const int buttonLeft = OFFSET_X + (GameLogic::COLS - 1) * GRID_W + 40;
+    const int buttonTop = WIN_HEIGHT - 78;
+    const int buttonRight = WIN_WIDTH - 24;
+    const int buttonBottom = WIN_HEIGHT - 24;
+
+    setlinecolor(RGB(70, 100, 160));
+    setfillcolor(RGB(42, 93, 168));
+    fillroundrect(buttonLeft, buttonTop, buttonRight, buttonBottom, 12, 12);
+
+    setbkmode(TRANSPARENT);
+    settextcolor(WHITE);
+    settextstyle(22, 0, L"微软雅黑", 0, 0, FW_BOLD, false, false, false);
+    const wchar_t* titleText = L"GitHub 主页";
+    const wchar_t* hintText = L"一键跳转下载地址";
+    int titleTw = textwidth(titleText);
+    int titleTh = textheight(titleText);
+    int hintTw = textwidth(hintText);
+    int hintTh = textheight(hintText);
+    outtextxy(buttonLeft + (buttonRight - buttonLeft - titleTw) / 2, buttonTop + 6, titleText);
+    settextstyle(16, 0, L"微软雅黑");
+    outtextxy(buttonLeft + (buttonRight - buttonLeft - hintTw) / 2, buttonTop + 34, hintText);
+}
+
 int Drawer::hitTestDifficultyOption(int x, int y) const {
     const int panelTop = WIN_HEIGHT - 170;
     const int optionLeft = 40;
@@ -439,6 +464,18 @@ int Drawer::hitTestDifficultyOption(int x, int y) const {
     }
     if (x >= optionLeft && x <= optionRight && y >= secondOptionTop && y <= secondOptionTop + optionHeight) {
         return 1;
+    }
+    return -1;
+}
+
+int Drawer::hitTestGithubButton(int x, int y) const {
+    const int buttonLeft = OFFSET_X + (GameLogic::COLS - 1) * GRID_W + 40;
+    const int buttonTop = WIN_HEIGHT - 78;
+    const int buttonRight = WIN_WIDTH - 24;
+    const int buttonBottom = WIN_HEIGHT - 24;
+
+    if (x >= buttonLeft && x <= buttonRight && y >= buttonTop && y <= buttonBottom) {
+        return 0;
     }
     return -1;
 }

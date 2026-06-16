@@ -2,6 +2,7 @@
 #include "draw.h"
 #include "music.h"
 #include <windows.h>
+#include <shellapi.h>
 #include <chrono>
 #include <array>
 
@@ -179,6 +180,7 @@ int main() {
     auto aiTurnStartTime = std::chrono::steady_clock::now();
 
     ExMessage msg;
+    const wchar_t* githubUrl = L"https://github.com/susuian53/army";
 
     while (running) {
         // --- 1. WIN CHECK (胜负判定) ---
@@ -238,6 +240,12 @@ int main() {
         // --- 4. INPUT PROCESSING (消息处理) ---
         while (peekmessage(&msg, EM_MOUSE | EM_KEY)) {
             if (msg.message == WM_LBUTTONDOWN) {
+                if (drawer.hitTestGithubButton(msg.x, msg.y) != -1) {
+                    ShellExecuteW(NULL, L"open", githubUrl, NULL, NULL, SW_SHOWNORMAL);
+                    setAnnouncement(L"已打开 GitHub 主页");
+                    continue;
+                }
+
                 int audioHit = drawer.hitTestAudioControl(msg.x, msg.y);
                 if (audioHit != -1) {
                     if (audioHit == 0) {

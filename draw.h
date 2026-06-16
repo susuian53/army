@@ -20,10 +20,12 @@ public:
         const std::wstring& announcementText, bool inspectArmed, int inspectCooldownTurns); // 绘制 UI 状态信息
     void drawRules();                                       // 绘制右侧规则说明
     void drawSystemAnnouncement(const std::wstring& announcementText); // 绘制系统公告栏
+    void drawGithubButton();                                // 绘制右下角 GitHub 按钮
     void drawAudioControls(int volume, bool musicEnabled);   // 绘制左侧中部音频控制
     void drawInspectSkillPanel(bool inspectArmed, int inspectCooldownTurns, bool defaultMode); // 绘制验牌技能面板
     void drawDifficultySelector(int difficultyIndex);       // 绘制左下角难度选择
     int hitTestAudioControl(int x, int y) const;            // 点击命中音频控制
+    int hitTestGithubButton(int x, int y) const;            // 点击命中 GitHub 按钮
     int hitTestInspectSkillButton(int x, int y) const;      // 点击命中验牌技能按钮
     int audioVolumeFromSliderX(int x) const;                 // 根据滑条位置计算音量
     int hitTestDifficultyOption(int x, int y) const;        // 点击命中难度选项
