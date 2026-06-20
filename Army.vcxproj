@@ -157,6 +157,9 @@
     <Image Include="small.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="Army.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="draw.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="main.cpp" />
@@ -166,6 +169,7 @@
     <ClInclude Include="draw.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="music.h" />
+    <ClInclude Include="Resource.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

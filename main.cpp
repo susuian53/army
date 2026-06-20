@@ -189,7 +189,7 @@ int main() {
         // --- 1.1 VICTORY MUSIC HANDLING (胜利音乐处理) ---
         if (winner != 0 && backgroundMusicEnabled) {
             if (!victoryMusicStarted) {
-                music.playVictoryMusic(musicFolder);
+                music.playVictoryMusic();
                 victoryMusicStarted = true;
             } else if (!music.isVictoryMusicPlaying()) {
                 // Music finished, reset game (音乐播放结束，重置游戏)
@@ -262,7 +262,7 @@ int main() {
                             if (winner == 0 && !victoryMusicStarted) {
                                 music.playBackgroundMusic();
                             } else if (winner != 0) {
-                                music.playVictoryMusic(musicFolder);
+                                music.playVictoryMusic();
                                 victoryMusicStarted = true;
                             }
                         }
@@ -272,13 +272,15 @@ int main() {
 
                 int inspectHit = drawer.hitTestInspectSkillButton(msg.x, msg.y);
                 if (inspectHit != -1) {
+                    PlaySound(L"SystemExclamation", NULL, SND_ASYNC | SND_ALIAS);
+                    music.playInspectSkill();
                     if (difficultyIndex != 0) {
                         setAnnouncement(L"明棋模式无需验牌");
                     } else if (inspectCooldownTurns > 0) {
                         setAnnouncement(L"验牌冷却中，请等待" + std::to_wstring(inspectCooldownTurns) + L"回合");
                     } else {
                         inspectArmed = true;
-                        setAnnouncement(L"验牌已开启，请点击一张牌");
+                        setAnnouncement(L"验牌已开启，请点击一张牌 | " + music.getLastInspectDebugInfo());
                     }
                     continue;
                 }
