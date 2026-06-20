@@ -45,3 +45,26 @@ source/*.zip
 
 # 其他 IDE 配置（如果不需要共享） 
 .vscode/
+
+# 忽略音频与文档（按请求不上传）
+# 仅针对项目中常见的音频/文档目录和扩展名
+/assets/audio/
+电台节目/
+# 源文件夹中的帮助/文档
+/source/*.chm
+/source/*.md
+
+# 常见音频格式
+*.wav
+*.mp3
+*.flac
+*.aac
+*.ogg
+
+# 常见文档格式
+*.chm
+*.pdf
+*.docx
+*.doc
+*.txt
+*.zip
